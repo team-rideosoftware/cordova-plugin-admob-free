@@ -29,26 +29,25 @@
     <dependency id="cordova-admob-sdk" version="~0.24.1" />
 
     <platform name="android">
-        <preference name="ADMOB_APP_ID" default=""/>
+        <preference name="APP_ID_ANDROID" default="ca-app-pub-xxx~yyy" />
+        <preference name="PLAY_SERVICES_VERSION" default="22.1.0" />
 
-        <config-file parent="/manifest/application" target="AndroidManifest.xml">
-            <activity android:name="com.google.android.gms.ads.AdActivity"
-                android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
-                android:theme="@android:style/Theme.Translucent" />
-            <meta-data
-                android:name="com.google.android.gms.ads.APPLICATION_ID"
-                android:value="$ADMOB_APP_ID"/>
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <activity android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize" android:excludeFromRecents="true" android:name="com.google.android.gms.ads.AdActivity" android:noHistory="true" />
+            <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="$APP_ID_ANDROID" />
+            <meta-data android:name="com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT" android:value="true"/>
+            <meta-data android:name="com.google.android.gms.ads.flag.OPTIMIZE_INITIALIZATION" android:value="true" />
+            <meta-data android:name="com.google.android.gms.ads.flag.OPTIMIZE_AD_LOADING" android:value="true" />
+            <meta-data android:name="com.google.android.gms.ads.flag.INTEGRATION_MANAGER" android:value="webview" />
         </config-file>
-        <config-file parent="/*" target="AndroidManifest.xml">
-            <uses-permission android:name="android.permission.INTERNET" />
-            <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-        </config-file>
-        <config-file parent="/*" target="res/xml/config.xml">
+
+        <config-file target="res/xml/config.xml" parent="/*">
             <feature name="AdMob">
-                <param name="android-package" value="name.ratson.cordova.admob.AdMob" />
-                <param name="onload" value="true" />
+                <param name="android-package" value="admob.plus.cordova.AdMob"/>
             </feature>
         </config-file>
+
+        <framework src="com.google.android.gms:play-services-ads:$PLAY_SERVICES_VERSION" />
 
         <source-file src="src/android/banner/BannerExecutor.java" target-dir="src/name/ratson/cordova/admob/banner" />
         <source-file src="src/android/banner/BannerListener.java" target-dir="src/name/ratson/cordova/admob/banner" />
@@ -65,11 +64,44 @@
     </platform>
 
     <platform name="ios">
+        <preference name="APP_ID_IOS" default="ca-app-pub-xxx~yyy" />
+        <preference name="USAGE" default="This identifier will be used to deliver personalized ads to you." />
+        <preference name="disableSDKCrashReporting" default="false" />
+
         <config-file parent="/*" target="config.xml">
             <feature name="AdMob">
                 <param name="ios-package" value="CDVAdMob" />
             </feature>
         </config-file>
+
+        <config-file target="*-Info.plist" parent="GADApplicationIdentifier">
+            <string>$APP_ID_IOS</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="GADDelayAppMeasurementInit">
+            <true/>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSAppTransportSecurity">
+            <dict>
+                <key>NSAllowsArbitraryLoads</key>
+                <true/>
+                <key>NSAllowsArbitraryLoadsForMedia</key>
+                <true/>
+                <key>NSAllowsArbitraryLoadsInWebContent</key>
+                <true/>
+            </dict>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSUserTrackingUsageDescription">
+            <string>$USAGE</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="GADIntegrationManager">
+            <string>webview</string>
+        </config-file>
+
+
         <header-file src="src/ios/CDVAdMob.h" />
         <source-file src="src/ios/CDVAdMob.m" />
     </platform>
