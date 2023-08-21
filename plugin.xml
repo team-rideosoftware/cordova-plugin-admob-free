@@ -43,7 +43,8 @@
 
         <config-file target="res/xml/config.xml" parent="/*">
             <feature name="AdMob">
-                <param name="android-package" value="admob.plus.cordova.AdMob"/>
+                <param name="android-package" value="name.ratson.cordova.admob.AdMob" />
+                <param name="onload" value="true" />
             </feature>
         </config-file>
 
