@@ -1,0 +1,9 @@
+buildscript {
+	repositories {
+            jcenter()
+			mavenLocal()
+        }
+    dependencies {
+        classpath 'com.google.android.gms:play-services-ads:22.2.0'
+    }
+}

@@ -48,7 +48,9 @@
             </feature>
         </config-file>
 
-        <framework src="com.google.android.gms:play-services-ads:$PLAY_SERVICES_VERSION" />
+        <framework src="src/android/admob.gradle" custom="true" type="gradleReference"/>
+
+        <!--<framework src="com.google.android.gms:play-services-ads:$PLAY_SERVICES_VERSION" />-->
 
         <source-file src="src/android/banner/BannerExecutor.java" target-dir="src/name/ratson/cordova/admob/banner" />
         <source-file src="src/android/banner/BannerListener.java" target-dir="src/name/ratson/cordova/admob/banner" />
