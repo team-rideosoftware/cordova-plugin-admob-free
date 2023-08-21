@@ -48,7 +48,6 @@
             </feature>
         </config-file>
 
-        <framework src="src/android/admob.gradle" custom="true" type="gradleReference"/>
 
         <framework src="com.google.android.gms:play-services-ads:15.0.0" />
 
