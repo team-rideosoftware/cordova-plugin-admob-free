@@ -50,10 +50,7 @@
             </feature>
         </config-file>
 
-
         <framework src="com.google.android.gms:play-services-ads:15.0.0" />
-
-
 
         <source-file src="src/android/banner/BannerExecutor.java" target-dir="src/name/ratson/cordova/admob/banner" />
         <source-file src="src/android/banner/BannerListener.java" target-dir="src/name/ratson/cordova/admob/banner" />
@@ -107,8 +104,17 @@
             <string>webview</string>
         </config-file>
 
-
         <header-file src="src/ios/CDVAdMob.h" />
         <source-file src="src/ios/CDVAdMob.m" />
+
+        <podspec>
+            <config>
+                <source url="https://cdn.cocoapods.org/"/>
+            </config>
+            <pods>
+                <pod name="Google-Mobile-Ads-SDK" spec="~> 10.3.0" />
+                <pod name="GoogleUserMessagingPlatform" spec="~> 1.2.0" />
+            </pods>
+        </podspec>
     </platform>
 </plugin>
