@@ -1,26 +1,20 @@
-#import <AdSupport/ASIdentifierManager.h>
-#import <CommonCrypto/CommonDigest.h>
-
 #import "CDVAdMob.h"
-
-#import <GoogleMobileAds/GADExtras.h>
 
 @interface CDVAdMob()
 
-- (void) __setOptions:(NSDictionary*) options;
+- (void) resizeViews;
 - (void) __createBanner;
 - (void) __showAd:(BOOL)show;
 - (BOOL) __showInterstitial:(BOOL)show;
-- (void) __showRewardedVideo:(BOOL)show;
+- (void) __setOptions:(NSDictionary*) options;
+- (void) __loadForm:(CDVInvokedUrlCommand*)command;
+
 - (GADRequest*) __buildAdRequest;
-- (NSString*) __md5: (NSString*) s;
-- (NSString *) __getAdMobDeviceId;
+- (NSString *)  __getAdMobDeviceId;
+- (NSString*)   __md5: (NSString*) string;
+- (GADAdSize)   __AdSizeFromString:(NSString *)string;
 
-- (void)resizeViews;
-
-- (GADAdSize)__AdSizeFromString:(NSString *)string;
-
-- (void)deviceOrientationChange:(NSNotification *)notification;
+- (void) deviceOrientationChange:(NSNotification *)notification;
 - (void) fireEvent:(NSString *)obj event:(NSString *)eventName withData:(NSString *)jsonStr;
 
 @end
@@ -29,41 +23,33 @@
 
 @synthesize bannerView = bannerView_;
 @synthesize interstitialView = interstitialView_;
-@synthesize rewardVideoView = rewardVideoView_;
 
-@synthesize publisherId, interstitialAdId, rewardVideoId, adSize;
+@synthesize publisherId, interstitialAdId, adSize;
 @synthesize bannerAtTop, bannerOverlap, offsetTopBar;
 @synthesize isTesting, adExtras;
 
 @synthesize bannerIsVisible, bannerIsInitialized;
-@synthesize bannerShow, autoShow, autoShowBanner, autoShowInterstitial, autoShowRewardVideo;
+@synthesize bannerShow, autoShow, autoShowBanner, autoShowInterstitial;
 
+@synthesize forChild;
 
-@synthesize gender, forChild;
-
-@synthesize rewardedVideoLock, isRewardedVideoLoading;
-
-#define DEFAULT_BANNER_ID    @"ca-app-pub-3940256099942544/2934735716"
+#define DEFAULT_BANNER_ID       @"ca-app-pub-3940256099942544/2934735716"
 #define DEFAULT_INTERSTITIAL_ID @"ca-app-pub-3940256099942544/4411468910"
-#define DEFAULT_REWARD_VIDEO_ID @"ca-app-pub-3940256099942544/1712485313"
 
-#define OPT_PUBLISHER_ID    @"publisherId"
 #define OPT_INTERSTITIAL_ADID   @"interstitialAdId"
-#define OPT_REWARD_VIDEO_ID   @"rewardVideoId"
-#define OPT_AD_SIZE         @"adSize"
-#define OPT_BANNER_AT_TOP   @"bannerAtTop"
-#define OPT_OVERLAP         @"overlap"
-#define OPT_OFFSET_TOPBAR   @"offsetTopBar"
-#define OPT_IS_TESTING      @"isTesting"
-#define OPT_AD_EXTRAS       @"adExtras"
-#define OPT_AUTO_SHOW       @"autoShow"
-
-#define OPT_GENDER          @"gender"
-#define OPT_FORCHILD        @"forChild"
+#define OPT_OFFSET_TOPBAR       @"offsetTopBar"
+#define OPT_BANNER_AT_TOP       @"bannerAtTop"
+#define OPT_PUBLISHER_ID        @"publisherId"
+#define OPT_IS_TESTING          @"isTesting"
+#define OPT_AD_EXTRAS           @"adExtras"
+#define OPT_AUTO_SHOW           @"autoShow"
+#define OPT_FORCHILD            @"forChild"
+#define OPT_OVERLAP             @"overlap"
+#define OPT_AD_SIZE             @"adSize"
 
 #pragma mark Cordova JS bridge
 
-- (void)pluginInitialize {
+- (void) pluginInitialize {
     [super pluginInitialize];
     if (self) {
         // These notifications are required for re-placing the ad on orientation
@@ -80,7 +66,6 @@
     bannerShow = true;
     publisherId = DEFAULT_BANNER_ID;
     interstitialAdId = DEFAULT_INTERSTITIAL_ID;
-    rewardVideoId = DEFAULT_REWARD_VIDEO_ID;
     adSize = [self __AdSizeFromString:@"SMART_BANNER"];
 
     bannerAtTop = false;
@@ -91,16 +76,11 @@
     autoShow = true;
     autoShowBanner = true;
     autoShowInterstitial = false;
-    autoShowRewardVideo = false;
 
     bannerIsInitialized = false;
     bannerIsVisible = false;
 
-    gender = nil;
     forChild = nil;
-
-    isRewardedVideoLoading = false;
-    rewardedVideoLock = nil;
 
     srand((unsigned int)time(NULL));
 
@@ -115,7 +95,7 @@
     NSArray* args = command.arguments;
 
     NSUInteger argc = [args count];
-    if( argc >= 1 ) {
+    if (argc >= 1) {
         NSDictionary* options = [command argumentAtIndex:0 withDefault:[NSNull null]];
 
         [self __setOptions:options];
@@ -125,11 +105,153 @@
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// iOS 14 AppTrackingTransparency (Recommended: UMP is buggy! 2020.09.22) (added by tomitank)
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+ #pragma mark AppTrackingTransparency implementation
+
+- (void) getTrackingStatus:(CDVInvokedUrlCommand *)command {
+    NSLog(@"getTrackingStatus");
+
+    CDVPluginResult *pluginResult;
+    NSString *callbackId = command.callbackId;
+
+    if (@available(iOS 14.0, *)) {
+
+        if ([ATTrackingManager trackingAuthorizationStatus] == ATTrackingManagerAuthorizationStatusNotDetermined) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"notDetermined"];
+        } else if ([ATTrackingManager trackingAuthorizationStatus] == ATTrackingManagerAuthorizationStatusRestricted) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"restricted"];
+        } else if ([ATTrackingManager trackingAuthorizationStatus] == ATTrackingManagerAuthorizationStatusDenied)  {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"denied"];
+        } else {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"authorized"];
+        }
+    } else {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"authorized"];
+    }
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+}
+
+- (void) trackingStatusForm:(CDVInvokedUrlCommand *)command {
+    NSLog(@"trackingStatusForm");
+
+    if (@available(iOS 14.0, *)) {
+
+        [ATTrackingManager requestTrackingAuthorizationWithCompletionHandler:^(ATTrackingManagerAuthorizationStatus status) {
+            [self getTrackingStatus:command]; // return with status string instead of "status" variable..
+        }];
+
+    } else {
+
+        [self getTrackingStatus:command]; // return with authorized string..
+    }
+}
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// User Messaging Platform SDK (added by tomitank)
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+ #pragma mark UserMessagingPlatform implementation
+
+- (void) userMessagingPlatform:(CDVInvokedUrlCommand *)command {
+
+    // Create a UMPRequestParameters object.
+    UMPRequestParameters *parameters = [[UMPRequestParameters alloc] init];
+    // Set tag for under age of consent. Here NO means users are not under age.
+    parameters.tagForUnderAgeOfConsent = NO;
+    // Request an update to the consent information.
+
+    if (!UMPConsentInformation.sharedInstance) {
+        NSLog(@"No shared instance");
+
+        CDVPluginResult *pluginResult;
+        NSString *callbackId = command.callbackId;
+
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"noSharedInstance"];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+    }
+
+    [UMPConsentInformation.sharedInstance requestConsentInfoUpdateWithParameters:parameters completionHandler:^(NSError* _Nullable error) {
+        NSLog(@"sharedInstance");
+
+        CDVPluginResult *pluginResult;
+        NSString *callbackId = command.callbackId;
+
+        // The consent information has updated.
+        if (error) {
+            // Handle the error.
+            NSLog(@"UMP error %@", error);
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"umpError"];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+        } else {
+            // The consent information state was updated.
+            // You are now ready to see if a form is available.
+            NSLog(@"Proceed to form..");
+            UMPFormStatus formStatus = UMPConsentInformation.sharedInstance.formStatus;
+            if (formStatus == UMPFormStatusAvailable) {
+                NSLog(@"Loading form..");
+                [self __loadForm:command];
+            } else {
+                NSLog(@"Form status is not available");
+                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"formStatusNotAvailable"];
+                [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+            }
+        }
+    }];
+}
+
+- (void) __loadForm:(CDVInvokedUrlCommand *)command {
+
+    [UMPConsentForm loadWithCompletionHandler:^(UMPConsentForm *form, NSError *loadError) {
+
+        CDVPluginResult *pluginResult;
+        NSString *callbackId = command.callbackId;
+
+        if (loadError) {
+            // Handle the error.
+            NSLog(@"Form error %@", loadError);
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"formError"];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+        } else {
+            // Present the form. You can also hold on to the reference to present later.
+            NSLog(@"Presenting form..");
+            if (UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatusRequired) {
+                    [form presentFromViewController:self.viewController completionHandler:^(NSError *_Nullable dismissError) {
+
+                        CDVPluginResult *pluginResult;
+                        NSString *callbackId = command.callbackId;
+
+                        if (UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatusObtained) {
+                            // App can start requesting ads.
+                            NSLog(@"Obtained");
+                            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"obtained"];
+                        } else {
+                            NSLog(@"Not obtained");
+                            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"notObtained"];
+                        }
+                        [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+                    }];
+            } else {
+                // Keep the form available for changes to user consent.
+                NSLog(@"Keep the form available for changes to user consent.");
+                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"keepTheForm"];
+                [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
+            }
+        }
+    }];
+}
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Banner public functions
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
 // The javascript from the AdMob plugin calls this when createBannerView is
 
 // invoked. This method parses the arguments passed in.
 
-- (void)createBannerView:(CDVInvokedUrlCommand *)command {
+- (void) createBannerView:(CDVInvokedUrlCommand *)command {
     NSLog(@"createBannerView");
 
     CDVPluginResult *pluginResult;
@@ -137,37 +259,37 @@
     NSArray* args = command.arguments;
 
     NSUInteger argc = [args count];
-    if( argc >= 1 ) {
+    if (argc >= 1) {
         NSDictionary* options = [command argumentAtIndex:0 withDefault:[NSNull null]];
         [self __setOptions:options];
         autoShowBanner = autoShow;
     }
 
-    if(! self.bannerView) {
+    if (!self.bannerView) {
         [self __createBanner];
     }
 
-    if(autoShowBanner) {
+    if (autoShowBanner) {
         bannerShow = autoShowBanner;
-
         [self __showAd:YES];
     }
 
-    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    NSString *callbackString = self.publisherId;
+
+    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:callbackString];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
-- (void)destroyBannerView:(CDVInvokedUrlCommand *)command {
+- (void) destroyBannerView:(CDVInvokedUrlCommand *)command {
     NSLog(@"destroyBannerView");
 
     CDVPluginResult *pluginResult;
     NSString *callbackId = command.callbackId;
 
-    if(self.bannerView) {
+    if (self.bannerView) {
         [self.bannerView setDelegate:nil];
         [self.bannerView removeFromSuperview];
         self.bannerView = nil;
-
         [self resizeViews];
     }
 
@@ -176,49 +298,7 @@
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
-- (void)prepareInterstitial:(CDVInvokedUrlCommand *)command {
-    NSLog(@"prepareInterstitial");
-
-    CDVPluginResult *pluginResult;
-    NSString *callbackId = command.callbackId;
-    NSArray* args = command.arguments;
-
-    NSUInteger argc = [args count];
-    if (argc >= 1) {
-        NSDictionary* options = [command argumentAtIndex:0 withDefault:[NSNull null]];
-        [self __setOptions:options];
-        autoShowInterstitial = autoShow;
-    }
-
-    [self __cycleInterstitial];
-    [self.interstitialView loadRequest:[self __buildAdRequest]];
-
-    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
-
-}
-
-- (void)createInterstitialView:(CDVInvokedUrlCommand *)command {
-    NSLog(@"createInterstitialView");
-
-    CDVPluginResult *pluginResult;
-    NSString *callbackId = command.callbackId;
-    NSArray* args = command.arguments;
-
-    NSUInteger argc = [args count];
-    if (argc >= 1) {
-        NSDictionary* options = [command argumentAtIndex:0 withDefault:[NSNull null]];
-        [self __setOptions:options];
-        autoShowInterstitial = autoShow;
-    }
-
-    [self __cycleInterstitial];
-    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
-}
-
-- (void)showAd:(CDVInvokedUrlCommand *)command {
+- (void) showAd:(CDVInvokedUrlCommand *)command {
     NSLog(@"showAd");
 
     CDVPluginResult *pluginResult;
@@ -234,55 +314,17 @@
 
     bannerShow = show;
 
-    if(! self.bannerView) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"adView is null, call createBannerView first."];
-
+    if (!self.bannerView) {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"bannerView is null, call createBannerView first."];
     } else {
         [self __showAd:show];
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-
     }
 
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
-- (void)showInterstitialAd:(CDVInvokedUrlCommand *)command {
-    NSLog(@"showInterstitial");
-
-    CDVPluginResult *pluginResult;
-    NSString *callbackId = command.callbackId;
-
-    if(! self.interstitialView) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"interstitialAd is null, call createInterstitialView first."];
-
-    } else {
-        BOOL showed = [self __showInterstitial:YES];
-        if (showed) {
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-        } else {
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"interstitial not ready yet."];
-        }
-    }
-
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
-}
-
-- (void)isInterstitialReady:(CDVInvokedUrlCommand *)command {
-    NSLog(@"isInterstitialReady");
-
-    CDVPluginResult *pluginResult;
-    NSString *callbackId = command.callbackId;
-
-    if (self.interstitialView && self.interstitialView.isReady) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:true];
-    } else {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:false];
-    }
-
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
-}
-
-- (void)requestAd:(CDVInvokedUrlCommand *)command {
+- (void) requestAd:(CDVInvokedUrlCommand *)command {
     NSLog(@"requestAd");
 
     CDVPluginResult *pluginResult;
@@ -295,9 +337,8 @@
         [self __setOptions:options];
     }
 
-    if(! self.bannerView) {
+    if (!self.bannerView) {
         [self __createBanner];
-
     } else {
         [self.bannerView loadRequest:[self __buildAdRequest]];
     }
@@ -306,8 +347,59 @@
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
-- (void)requestInterstitialAd:(CDVInvokedUrlCommand *)command {
-    NSLog(@"requestInterstitialAd");
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Banner private functions
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+- (void) __createBanner {
+    NSLog(@"__createBanner");
+
+    // set background color to black
+    //self.webView.superview.backgroundColor = [UIColor blackColor];
+    //self.webView.superview.tintColor = [UIColor whiteColor];
+
+    if (!self.bannerView) {
+        self.bannerView = [[GADBannerView alloc] initWithAdSize:adSize];
+        self.bannerView.adUnitID = [self publisherId];
+        self.bannerView.delegate = self;
+        self.bannerView.rootViewController = self.viewController;
+        self.bannerIsInitialized = YES;
+        self.bannerIsVisible = NO;
+        [self resizeViews];
+        [self.bannerView loadRequest:[self __buildAdRequest]];
+    }
+}
+
+- (void) __showAd:(BOOL)show {
+    //NSLog(@"Show Ad: %d", show);
+
+    if (!self.bannerIsInitialized) {
+        [self __createBanner];
+    }
+
+    if (show == self.bannerIsVisible) { // same state, nothing to do
+        //NSLog(@"already show: %d", show);
+        [self resizeViews];
+    } else if (show) {
+        //NSLog(@"show now: %d", show);
+        UIView* parentView = self.bannerOverlap ? self.webView : [self.webView superview];
+        [parentView addSubview:self.bannerView];
+        [parentView bringSubviewToFront:self.bannerView];
+        [self resizeViews];
+        self.bannerIsVisible = YES;
+    } else {
+        [self.bannerView removeFromSuperview];
+        [self resizeViews];
+        self.bannerIsVisible = NO;
+    }
+}
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Interstitial public functions
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+- (void) prepareInterstitial:(CDVInvokedUrlCommand *)command {
+    NSLog(@"prepareInterstitial");
 
     CDVPluginResult *pluginResult;
     NSString *callbackId = command.callbackId;
@@ -317,67 +409,40 @@
     if (argc >= 1) {
         NSDictionary* options = [command argumentAtIndex:0 withDefault:[NSNull null]];
         [self __setOptions:options];
+        autoShowInterstitial = autoShow;
     }
 
-    if(! self.interstitialView) {
-        [self __cycleInterstitial];
+    [self __cycleInterstitial];
 
-    } else {
-        [self.interstitialView loadRequest:[self __buildAdRequest]];
-    }
+    NSString *callbackString = self.interstitialAdId;
 
-    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:callbackString];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
-- (void)createRewardVideo:(CDVInvokedUrlCommand *)command {
-    NSLog(@"createRewardVideo");
-
-    CDVPluginResult *pluginResult;
-    NSString *callbackId = command.callbackId;
-    NSArray* args = command.arguments;
-
-    NSUInteger argc = [args count];
-    if (argc >= 1) {
-        NSDictionary* options = [command argumentAtIndex:0 withDefault:[NSNull null]];
-        [self __setOptions:options];
-        autoShowRewardVideo = autoShow;
-    }
-
-    [self __cycleRewardVideo];
-    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
-
-}
-
-
-- (void)showRewardVideo:(CDVInvokedUrlCommand *)command {
-    NSLog(@"showRewardVideo");
+- (void) showInterstitialAd:(CDVInvokedUrlCommand *)command {
+    NSLog(@"showInterstitial");
 
     CDVPluginResult *pluginResult;
     NSString *callbackId = command.callbackId;
 
-    if(! self.rewardVideoView) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"rewardVideoAd is null, call createRewardVideo first."];
-
-    } else {
-        [self __showRewardedVideo:YES];
+    BOOL showed = [self __showInterstitial:YES];
+    if (showed) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-
+    } else {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"interstitial not ready yet."];
     }
 
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
-
 }
 
-- (void)isRewardVideoReady:(CDVInvokedUrlCommand *)command {
-    NSLog(@"isRewardVideoReady");
+- (void) isInterstitialReady:(CDVInvokedUrlCommand *)command {
+    NSLog(@"isInterstitialReady");
 
     CDVPluginResult *pluginResult;
     NSString *callbackId = command.callbackId;
 
-    if (self.rewardVideoView && self.rewardVideoView.isReady) {
+    if (self.interstitialView && [self.interstitialView canPresentFromRootViewController:self.viewController error:nil]) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:true];
     } else {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:false];
@@ -386,58 +451,200 @@
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
-- (void) __cycleRewardVideo {
-    NSLog(@"__cycleRewardVideo");
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Interstitial private functions
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-    @synchronized(self.rewardedVideoLock) {
-        if (!self.isRewardedVideoLoading) {
-            self.isRewardedVideoLoading = true;
+- (void) __cycleInterstitial {
+    NSLog(@"__cycleInterstitial");
 
-            // Clean up the old video...
-            if (self.rewardVideoView) {
-                self.rewardVideoView.delegate = nil;
-                self.rewardVideoView = nil;
-            }
+    // Clean up the old interstitial...
+    if (self.interstitialView) {
+        self.interstitialView.fullScreenContentDelegate = nil;
+        self.interstitialView = nil;
+    }
 
-            // and create a new video. We set the delegate so that we can be notified of when
-            if (!self.rewardVideoView){
-                self.rewardVideoView = [GADRewardBasedVideoAd sharedInstance];
-                self.rewardVideoView.delegate = self;
+    // and create a new interstitial. We set the delegate so that we can be notified..
+    [GADInterstitialAd loadWithAdUnitID:self.interstitialAdId request:[self __buildAdRequest] completionHandler:^(GADInterstitialAd *ad, NSError *error) {
+        if (error) {
+            [self __interstitialNotLoaded:error]; // ERROR event
+        } else {
+            self.interstitialView = ad;
+            self.interstitialView.fullScreenContentDelegate = self;
+            [self __interstitialLoaded]; // LOAD event
+        }
+    }];
+}
 
-                [self.rewardVideoView loadRequest:[GADRequest request] withAdUnitID:self.rewardVideoId];
-            }
+- (BOOL) __showInterstitial:(BOOL)show {
+    NSLog(@"__showInterstitial");
+
+    if (!self.interstitialView) {
+        [self __cycleInterstitial];
+    }
+
+    if (self.interstitialView && [self.interstitialView canPresentFromRootViewController:self.viewController error:nil]) {
+        [self.interstitialView presentFromRootViewController:self.viewController];
+        return true;
+    } else {
+        NSLog(@"Ad wasn't ready");
+        return false;
+    }
+}
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Cordova events
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+- (void) fireEvent:(NSString *)obj event:(NSString *)eventName withData:(NSString *)jsonStr {
+    NSString* js;
+    if (obj && [obj isEqualToString:@"window"]) {
+        js = [NSString stringWithFormat:@"var evt=document.createEvent(\"UIEvents\");evt.initUIEvent(\"%@\",true,false,window,0);window.dispatchEvent(evt);", eventName];
+    } else if (jsonStr && [jsonStr length] > 0) {
+        js = [NSString stringWithFormat:@"javascript:cordova.fireDocumentEvent('%@',%@);", eventName, jsonStr];
+    } else {
+        js = [NSString stringWithFormat:@"javascript:cordova.fireDocumentEvent('%@');", eventName];
+    }
+    [self.commandDelegate evalJs:js];
+}
+
+#pragma mark GADBannerViewDelegate implementation
+
+- (void) bannerView:(GADBannerView *)view didFailToReceiveAdWithError:(NSError *)error {
+    NSString* jsonData = [NSString stringWithFormat:@"{ 'error': '%@', 'adType':'banner' }", [error localizedFailureReason]];
+    [self fireEvent:@"" event:@"admob.banner.events.LOAD_FAIL" withData:jsonData];
+    [self fireEvent:@"" event:@"onFailedToReceiveAd" withData:jsonData];
+}
+
+- (void) bannerViewDidReceiveAd:(GADBannerView *)bannerView {
+    if (self.bannerShow) {
+        [self __showAd:YES];
+    }
+    NSString* jsonData = [NSString stringWithFormat:@"{ 'bannerHeight': '%d' }", (int)self.bannerView.frame.size.height];
+    [self fireEvent:@"" event:@"admob.banner.events.LOAD" withData:jsonData];
+    [self fireEvent:@"" event:@"onReceiveAd" withData:nil];
+}
+/* NOT USED!
+- (void) bannerViewWillDismissScreen:(GADBannerView *)bannerView {
+    [self fireEvent:@"" event:@"admob.banner.events.EXIT_APP" withData:nil];
+    [self fireEvent:@"" event:@"onLeaveToAd" withData:nil];
+}
+*/
+- (void) bannerViewWillPresentScreen:(GADBannerView *)bannerView {
+    [self fireEvent:@"" event:@"admob.banner.events.OPEN" withData:nil];
+    [self fireEvent:@"" event:@"onPresentAd" withData:nil];
+}
+
+- (void) bannerViewDidDismissScreen:(GADBannerView *)bannerView {
+    [self fireEvent:@"" event:@"admob.banner.events.CLOSE" withData:nil];
+    [self fireEvent:@"" event:@"onDismissAd" withData:nil];
+}
+
+#pragma mark GADFullScreenContentDelegate implementation
+
+- (void) ad:(id)interstitial didFailToPresentFullScreenContentWithError:(NSError *)error {
+    [self __interstitialNotLoaded:error]; // ERROR event
+}
+
+- (void) __interstitialNotLoaded:(NSError *)error {
+    NSLog(@"Failed to [load or present] interstitial ad with error: %@", [error localizedDescription]);
+    NSString* jsonData = [NSString stringWithFormat:@"{ 'error': '%@', 'adType':'interstitial' }", [error localizedFailureReason]];
+    [self fireEvent:@"" event:@"admob.interstitial.events.LOAD_FAIL" withData:jsonData];
+    [self fireEvent:@"" event:@"onFailedToReceiveAd" withData:jsonData];
+}
+
+- (void) __interstitialLoaded { // was interstitialDidReceiveAd before SDK 8
+    [self fireEvent:@"" event:@"admob.interstitial.events.LOAD" withData:nil];
+    [self fireEvent:@"" event:@"onReceiveInterstitialAd" withData:nil];
+    if (self.interstitialView ) {
+        if (self.autoShowInterstitial) {
+            [self __showInterstitial:YES];
         }
     }
 }
 
+- (void) adDidPresentFullScreenContent:(id)interstitial {
+    [self fireEvent:@"" event:@"admob.interstitial.events.OPEN" withData:nil];
+    [self fireEvent:@"" event:@"onPresentInterstitialAd" withData:nil];
+}
+
+- (void) adDidDismissFullScreenContent:(id)interstitial {
+    [self fireEvent:@"" event:@"admob.interstitial.events.CLOSE" withData:nil];
+    [self fireEvent:@"" event:@"onDismissInterstitialAd" withData:nil];
+    if (self.interstitialView) {
+        self.interstitialView.fullScreenContentDelegate = nil;
+        self.interstitialView = nil;
+        [self resizeViews];
+    }
+}
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// __buildAdRequest
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+- (GADRequest*) __buildAdRequest {
+    GADRequest *request = [GADRequest request];
+
+    if (self.isTesting) {
+        NSString* deviceId = [self __getAdMobDeviceId];
+        GADMobileAds.sharedInstance.requestConfiguration.testDeviceIdentifiers = @[[deviceId lowercaseString]];
+        NSLog(@"testDeviceIdentifiers: %@", deviceId);
+    }
+
+    if (self.adExtras) {
+        GADExtras *extras = [[GADExtras alloc] init];
+        NSMutableDictionary *modifiedExtrasDict =
+        [[NSMutableDictionary alloc] initWithDictionary:self.adExtras];
+        [modifiedExtrasDict removeObjectForKey:@"cordova"];
+        [modifiedExtrasDict setValue:@"1" forKey:@"cordova"];
+        extras.additionalParameters = modifiedExtrasDict;
+        [request registerAdNetworkExtras:extras];
+    }
+
+    if (self.forChild != nil) {
+        if ([self.forChild caseInsensitiveCompare:@"yes"] == NSOrderedSame) {
+            [GADMobileAds.sharedInstance.requestConfiguration tagForUnderAgeOfConsent:YES];
+        } else if ([self.forChild caseInsensitiveCompare:@"no"] == NSOrderedSame) {
+            [GADMobileAds.sharedInstance.requestConfiguration tagForUnderAgeOfConsent:YES];
+        }
+    }
+    return request;
+}
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Options & veiw change & rest functions
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 - (GADAdSize)__AdSizeFromString:(NSString *)string {
     if ([string isEqualToString:@"BANNER"]) {
-        return kGADAdSizeBanner;
+        return GADAdSizeBanner;
     } else if ([string isEqualToString:@"IAB_MRECT"]) {
-        return kGADAdSizeMediumRectangle;
+        return GADAdSizeMediumRectangle;
     } else if ([string isEqualToString:@"IAB_BANNER"]) {
-        return kGADAdSizeFullBanner;
+        return GADAdSizeFullBanner;
     } else if ([string isEqualToString:@"IAB_LEADERBOARD"]) {
-        return kGADAdSizeLeaderboard;
+        return GADAdSizeLeaderboard;
     } else if ([string isEqualToString:@"LARGE_BANNER"]) {
-        return kGADAdSizeLargeBanner;
+        return GADAdSizeLargeBanner;
     } else if ([string isEqualToString:@"FLUID"]) {
-        return kGADAdSizeFluid;
+        return GADAdSizeFluid;
     } else if ([string isEqualToString:@"SMART_BANNER"]) {
         CGRect pr = self.webView.superview.bounds;
-        if(pr.size.width > pr.size.height) {
+        if (pr.size.width > pr.size.height) {
             return kGADAdSizeSmartBannerLandscape;
         }
         else {
             return kGADAdSizeSmartBannerPortrait;
         }
+    } else if ([string isEqualToString:@"ADAPTIVE_BANNER"]) {
+        CGRect pr = self.webView.superview.bounds;
+        GADCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(pr.size.width);
     } else {
-        return kGADAdSizeInvalid;
+        return GADAdSizeInvalid;
     }
 }
 
-- (NSString *) __getAdMobDeviceId {
+- (NSString*) __getAdMobDeviceId {
     NSUUID* adid = [[ASIdentifierManager sharedManager] advertisingIdentifier];
     return [self __md5:adid.UUIDString];
 }
@@ -471,11 +678,6 @@
     str = [options objectForKey:OPT_INTERSTITIAL_ADID];
     if (str && [str length] > 0) {
         interstitialAdId = str;
-    }
-
-    str = [options objectForKey:OPT_REWARD_VIDEO_ID];
-    if (str && [str length] > 0) {
-        rewardVideoId = str;
     }
 
     str = [options objectForKey:OPT_AD_SIZE];
@@ -513,10 +715,6 @@
         autoShow = [str boolValue];
     }
 
-    str = [options objectForKey:OPT_GENDER];
-    if (str && [str length] > 0) {
-        gender = str;
-    }
     str = [options objectForKey:OPT_FORCHILD];
     if (str && [str length] > 0) {
         forChild = str;
@@ -525,140 +723,8 @@
     }
 }
 
-- (void) __createBanner {
-    NSLog(@"__createBanner");
-
-    // set background color to black
-    //self.webView.superview.backgroundColor = [UIColor blackColor];
-    //self.webView.superview.tintColor = [UIColor whiteColor];
-
-    if (!self.bannerView){
-        self.bannerView = [[GADBannerView alloc] initWithAdSize:adSize];
-        self.bannerView.adUnitID = [self publisherId];
-        self.bannerView.delegate = self;
-        self.bannerView.rootViewController = self.viewController;
-
-        self.bannerIsInitialized = YES;
-        self.bannerIsVisible = NO;
-
-        [self resizeViews];
-
-        [self.bannerView loadRequest:[self __buildAdRequest]];
-    }
-}
-
-- (GADRequest*) __buildAdRequest {
-    GADRequest *request = [GADRequest request];
-
-    if (self.isTesting) {
-        NSString* deviceId = [self __getAdMobDeviceId];
-        request.testDevices = @[ kGADSimulatorID, deviceId, [deviceId lowercaseString] ];
-        NSLog(@"request.testDevices: %@", deviceId);
-    }
-    if (self.adExtras) {
-        GADExtras *extras = [[GADExtras alloc] init];
-        NSMutableDictionary *modifiedExtrasDict =
-        [[NSMutableDictionary alloc] initWithDictionary:self.adExtras];
-        [modifiedExtrasDict removeObjectForKey:@"cordova"];
-        [modifiedExtrasDict setValue:@"1" forKey:@"cordova"];
-        extras.additionalParameters = modifiedExtrasDict;
-        [request registerAdNetworkExtras:extras];
-    }
-
-    if (self.gender != nil) {
-        if ([self.gender caseInsensitiveCompare:@"male"] == NSOrderedSame) {
-            request.gender = kGADGenderMale;
-        } else if ([self.gender caseInsensitiveCompare:@"female"] == NSOrderedSame) {
-            request.gender = kGADGenderFemale;
-        } else {
-            request.gender = kGADGenderUnknown;
-        }
-    }
-
-    if (self.forChild != nil) {
-        if ([self.forChild caseInsensitiveCompare:@"yes"] == NSOrderedSame) {
-            [request tagForChildDirectedTreatment:YES];
-        } else if ([self.forChild caseInsensitiveCompare:@"no"] == NSOrderedSame) {
-            [request tagForChildDirectedTreatment:NO];
-        }
-    }
-
-    return request;
-}
-
-- (void) __showAd:(BOOL)show {
-    //NSLog(@"Show Ad: %d", show);
-
-    if (!self.bannerIsInitialized){
-        [self __createBanner];
-    }
-
-    if (show == self.bannerIsVisible) { // same state, nothing to do
-        //NSLog(@"already show: %d", show);
-        [self resizeViews];
-    } else if (show) {
-        //NSLog(@"show now: %d", show);
-
-        UIView* parentView = self.bannerOverlap ? self.webView : [self.webView superview];
-        [parentView addSubview:self.bannerView];
-        [parentView bringSubviewToFront:self.bannerView];
-        [self resizeViews];
-
-        self.bannerIsVisible = YES;
-    } else {
-        [self.bannerView removeFromSuperview];
-        [self resizeViews];
-
-        self.bannerIsVisible = NO;
-    }
-}
-
-- (void) __cycleInterstitial {
-    NSLog(@"__cycleInterstitial");
-
-    // Clean up the old interstitial...
-    if (self.interstitialView) {
-        self.interstitialView.delegate = nil;
-        self.interstitialView = nil;
-    }
-
-    // and create a new interstitial. We set the delegate so that we can be notified of when
-    if (!self.interstitialView){
-        self.interstitialView = [[GADInterstitial alloc] initWithAdUnitID:self.interstitialAdId];
-        self.interstitialView.delegate = self;
-
-        [self.interstitialView loadRequest:[self __buildAdRequest]];
-    }
-}
-
-- (BOOL) __showInterstitial:(BOOL)show {
-    NSLog(@"__showInterstitial");
-
-    if (!self.interstitialView){
-        [self __cycleInterstitial];
-    }
-
-    if (self.interstitialView && self.interstitialView.isReady) {
-        [self.interstitialView presentFromRootViewController:self.viewController];
-        return true;
-    } else {
-        NSLog(@"Ad wasn't ready");
-        return false;
-    }
-}
-
-- (void) __showRewardedVideo:(BOOL)show {
-    NSLog(@"__showRewardedVideo");
-
-    if (!self.rewardVideoView){
-        [self __cycleRewardVideo];
-    }
-
-    if (self.rewardVideoView && self.rewardVideoView.isReady) {
-        [self.rewardVideoView presentFromRootViewController:self.viewController];
-    } else {
-        NSLog(@"RewardVideo wasn't ready");
-    }
+- (void) deviceOrientationChange:(NSNotification *)notification {
+    [self resizeViews];
 }
 
 - (void) initializeSafeAreaBackgroundView
@@ -684,7 +750,7 @@
     }
 }
 
-- (void)resizeViews {
+- (void) resizeViews {
     // Frame of the main container view that holds the Cordova webview.
     CGRect pr = self.webView.superview.bounds, wf = pr;
     //NSLog(@"super view: %d x %d", (int)pr.size.width, (int)pr.size.height);
@@ -695,32 +761,32 @@
     //CGFloat top = isIOS7 ? MIN(sf.size.height, sf.size.width) : 0.0;
     float top = 0.0;
 
-    //if(! self.offsetTopBar) top = 0.0;
+    //if (!self.offsetTopBar) top = 0.0;
 
     wf.origin.y = top;
     wf.size.height = pr.size.height - top;
 
-    if( self.bannerView ) {
-        if( pr.size.width > pr.size.height ) {
-            if(GADAdSizeEqualToSize(self.bannerView.adSize, kGADAdSizeSmartBannerPortrait)) {
+    if (self.bannerView) {
+        if (pr.size.width > pr.size.height ) {
+            if (GADAdSizeEqualToSize(self.bannerView.adSize, kGADAdSizeSmartBannerPortrait)) {
                 self.bannerView.adSize = kGADAdSizeSmartBannerLandscape;
             }
         } else {
-            if(GADAdSizeEqualToSize(self.bannerView.adSize, kGADAdSizeSmartBannerLandscape)) {
+            if (GADAdSizeEqualToSize(self.bannerView.adSize, kGADAdSizeSmartBannerLandscape)) {
                 self.bannerView.adSize = kGADAdSizeSmartBannerPortrait;
             }
         }
 
         CGRect bf = self.bannerView.frame;
 
-        // If the ad is not showing or the ad is hidden, we don't want to resize anything.
+        // if the ad is not showing or the ad is hidden, we don't want to resize anything.
         UIView* parentView = self.bannerOverlap ? self.webView : [self.webView superview];
-        BOOL adIsShowing = ([self.bannerView isDescendantOfView:parentView]) && (! self.bannerView.hidden);
+        BOOL adIsShowing = ([self.bannerView isDescendantOfView:parentView]) && (!self.bannerView.hidden);
 
-        if( adIsShowing ) {
+        if (adIsShowing) {
             //NSLog( @"banner visible" );
-            if( bannerAtTop ) {
-                if(bannerOverlap) {
+            if (bannerAtTop) {
+                if (bannerOverlap) {
                     wf.origin.y = top;
                     bf.origin.y = 0; // banner is subview of webview
 
@@ -738,7 +804,7 @@
                         bf.size.width = wf.size.width - parentView.safeAreaInsets.left - parentView.safeAreaInsets.right;
                         wf.size.height -= parentView.safeAreaInsets.top;
 
-                        //If safeAreBackground was turned turned off, turn it back on
+                        // if safeAreBackground was turned turned off, turn it back on
                         _safeAreaBackgroundView.hidden = false;
 
                         CGRect saf = _safeAreaBackgroundView.frame;
@@ -755,7 +821,7 @@
                 // move webview to top
                 wf.origin.y = top;
 
-                if( bannerOverlap ) {
+                if (bannerOverlap) {
                     bf.origin.y = wf.size.height - bf.size.height; // banner is subview of webview
 
                     if (@available(iOS 11.0, *)) {
@@ -770,7 +836,7 @@
                         bf.size.width = wf.size.width - parentView.safeAreaInsets.left - parentView.safeAreaInsets.right;
                         wf.size.height -= parentView.safeAreaInsets.bottom;
 
-                        //If safeAreBackground was turned turned off, turn it back on
+                        // if safeAreBackground was turned turned off, turn it back on
                         _safeAreaBackgroundView.hidden = false;
 
                         CGRect saf = _safeAreaBackgroundView.frame;
@@ -784,7 +850,7 @@
                 }
             }
 
-            if(! bannerOverlap) wf.size.height -= bf.size.height;
+            if (!bannerOverlap) wf.size.height -= bf.size.height;
 
             bf.origin.x = (pr.size.width - bf.size.width) * 0.5f;
 
@@ -792,11 +858,11 @@
 
             //NSLog(@"x,y,w,h = %d,%d,%d,%d", (int) bf.origin.x, (int) bf.origin.y, (int) bf.size.width, (int) bf.size.height );
         } else {
-            //Hide safe area background if visibile and banner ad does not exist
+            // Hide safe area background if visibile and banner ad does not exist
             _safeAreaBackgroundView.hidden = true;
         }
     } else {
-        //Hide safe area background if visibile and banner ad does not exist
+        // Hide safe area background if visibile and banner ad does not exist
         _safeAreaBackgroundView.hidden = true;
     }
 
@@ -805,170 +871,23 @@
     //NSLog(@"superview: %d x %d, webview: %d x %d", (int) pr.size.width, (int) pr.size.height, (int) wf.size.width, (int) wf.size.height );
 }
 
-- (void)deviceOrientationChange:(NSNotification *)notification {
-    [self resizeViews];
-}
-
-- (void) fireEvent:(NSString *)obj event:(NSString *)eventName withData:(NSString *)jsonStr {
-    NSString* js;
-    if(obj && [obj isEqualToString:@"window"]) {
-        js = [NSString stringWithFormat:@"var evt=document.createEvent(\"UIEvents\");evt.initUIEvent(\"%@\",true,false,window,0);window.dispatchEvent(evt);", eventName];
-    } else if(jsonStr && [jsonStr length]>0) {
-        js = [NSString stringWithFormat:@"javascript:cordova.fireDocumentEvent('%@',%@);", eventName, jsonStr];
-    } else {
-        js = [NSString stringWithFormat:@"javascript:cordova.fireDocumentEvent('%@');", eventName];
-    }
-    [self.commandDelegate evalJs:js];
-}
-
-#pragma mark GADBannerViewDelegate implementation
-
-- (void)adViewDidReceiveAd:(GADBannerView *)adView {
-    if(self.bannerShow) {
-        [self __showAd:YES];
-    }
-    NSString* jsonData = [NSString stringWithFormat:@"{ 'bannerHeight': '%d' }", (int)self.bannerView.frame.size.height];
-    [self fireEvent:@"" event:@"admob.banner.events.LOAD" withData:jsonData];
-    [self fireEvent:@"" event:@"onReceiveAd" withData:nil];
-}
-
-- (void)adView:(GADBannerView *)view didFailToReceiveAdWithError:(GADRequestError *)error {
-    NSString* jsonData = [NSString stringWithFormat:@"{ 'error': '%@', 'adType':'banner' }", [error localizedFailureReason]];
-    [self fireEvent:@"" event:@"admob.banner.events.LOAD_FAIL" withData:jsonData];
-    [self fireEvent:@"" event:@"onFailedToReceiveAd" withData:jsonData];
-}
-
-- (void)adViewWillLeaveApplication:(GADBannerView *)adView {
-    NSString* jsonData = @"{ 'adType':'banner' }";
-    [self fireEvent:@"" event:@"admob.banner.events.EXIT_APP" withData:jsonData];
-    [self fireEvent:@"" event:@"onLeaveToAd" withData:jsonData];
-}
-
-- (void)adViewWillPresentScreen:(GADBannerView *)adView {
-    [self fireEvent:@"" event:@"admob.banner.events.OPEN" withData:nil];
-    [self fireEvent:@"" event:@"onPresentAd" withData:nil];
-}
-
-- (void)adViewDidDismissScreen:(GADBannerView *)adView {
-    [self fireEvent:@"" event:@"admob.banner.events.CLOSE" withData:nil];
-    [self fireEvent:@"" event:@"onDismissAd" withData:nil];
-}
-
-#pragma mark GADInterstitialDelegate implementation
-
-- (void)interstitial:(GADInterstitial *)ad
-    didFailToReceiveAdWithError:(GADRequestError *)error {
-    NSString* jsonData = [NSString stringWithFormat:@"{ 'error': '%@', 'adType':'interstitial' }", [error localizedFailureReason]];
-    [self fireEvent:@"" event:@"admob.interstitial.events.LOAD_FAIL" withData:jsonData];
-    [self fireEvent:@"" event:@"onFailedToReceiveAd" withData:jsonData];
-}
-
-- (void)interstitialWillLeaveApplication:(GADInterstitial *)interstitial {
-    NSString* jsonData = @"{ 'adType':'interstitial' }";
-    [self fireEvent:@"" event:@"admob.interstitial.events.EXIT_APP" withData:jsonData];
-    [self fireEvent:@"" event:@"onLeaveToAd" withData:jsonData];
-}
-
-- (void)interstitialDidReceiveAd:(GADInterstitial *)interstitial {
-    [self fireEvent:@"" event:@"admob.interstitial.events.LOAD" withData:nil];
-    [self fireEvent:@"" event:@"onReceiveInterstitialAd" withData:nil];
-    if (self.interstitialView){
-        if(self.autoShowInterstitial) {
-            [self __showInterstitial:YES];
-        }
-    }
-}
-
-- (void)interstitialWillPresentScreen:(GADInterstitial *)interstitial {
-    [self fireEvent:@"" event:@"admob.interstitial.events.OPEN" withData:nil];
-    [self fireEvent:@"" event:@"onPresentInterstitialAd" withData:nil];
-}
-
-
-- (void)interstitialDidDismissScreen:(GADInterstitial *)interstitial {
-    [self fireEvent:@"" event:@"admob.interstitial.events.CLOSE" withData:nil];
-    [self fireEvent:@"" event:@"onDismissInterstitialAd" withData:nil];
-    if (self.interstitialView) {
-        self.interstitialView.delegate = nil;
-        self.interstitialView = nil;
-        [self resizeViews];
-    }
-}
-
-
-#pragma mark GADRewardBasedVideoAdDelegate implementation
-
-- (void)rewardBasedVideoAd:(GADRewardBasedVideoAd *)rewardBasedVideoAd
-   didRewardUserWithReward:(GADAdReward *)reward {
-    NSString* obj = @"AdMob";
-    NSString* jsonData = [NSString stringWithFormat:@"{'adNetwork':'%@','adType':'rewardvideo','adEvent':'onRewardedVideo','rewardType':'%@','rewardAmount':%lf}",
-                        obj, reward.type, [reward.amount doubleValue]];
-    [self fireEvent:@"" event:@"admob.rewardvideo.events.REWARD" withData:jsonData];
-}
-
-- (void)rewardBasedVideoAdDidReceiveAd:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
-    @synchronized(self.rewardedVideoLock) {
-        self.isRewardedVideoLoading = false;
-    }
-    [self fireEvent:@"" event:@"admob.rewardvideo.events.LOAD" withData:nil];
-    if (self.rewardVideoView){
-        if(self.autoShowRewardVideo) {
-            [self __showRewardedVideo:YES];
-        }
-    }
-}
-
-- (void)rewardBasedVideoAdDidOpen:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
-    [self fireEvent:@"" event:@"admob.rewardvideo.events.OPEN" withData:nil];
-}
-
-- (void)rewardBasedVideoAdDidStartPlaying:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
-    [self fireEvent:@"" event:@"admob.rewardvideo.events.START" withData:nil];
-}
-
-- (void)rewardBasedVideoAdDidClose:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
-    [self fireEvent:@"" event:@"admob.rewardvideo.events.CLOSE" withData:nil];
-    if (self.rewardVideoView) {
-        self.rewardVideoView.delegate = nil;
-        self.rewardVideoView = nil;
-    }
-}
-
-- (void)rewardBasedVideoAdWillLeaveApplication:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
-    NSString* jsonData = @"{ 'adType':'rewardvideo' }";
-    [self fireEvent:@"" event:@"admob.rewardvideo.events.EXIT_APP" withData:jsonData];
-}
-
-- (void)rewardBasedVideoAd:(GADRewardBasedVideoAd *)rewardBasedVideoAd
-    didFailToLoadWithError:(NSError *)error {
-    @synchronized(self.rewardedVideoLock) {
-        self.isRewardedVideoLoading = false;
-    }
-    NSString* jsonData = [NSString stringWithFormat:@"{ 'error': '%@', 'adType':'rewardvideo' }", [error localizedFailureReason]];
-    [self fireEvent:@"" event:@"admob.rewardvideo.events.LOAD_FAIL" withData:jsonData];
-}
-
-
-
 #pragma mark Cleanup
 
-- (void)dealloc {
+- (void) dealloc {
     [[UIDevice currentDevice] endGeneratingDeviceOrientationNotifications];
     [[NSNotificationCenter defaultCenter]
      removeObserver:self
      name:UIDeviceOrientationDidChangeNotification
      object:nil];
 
-    bannerView_.delegate = nil;
-    bannerView_ = nil;
-    interstitialView_.delegate = nil;
-    interstitialView_ = nil;
-    rewardVideoView_.delegate = nil;
-    rewardVideoView_ =  nil;
-
     self.bannerView = nil;
     self.interstitialView = nil;
-    self.rewardVideoView = nil;
+
+    bannerView_.delegate = nil;
+    interstitialView_.fullScreenContentDelegate = nil;
+
+    bannerView_ = nil;
+    interstitialView_ = nil;
 }
 
 @end
