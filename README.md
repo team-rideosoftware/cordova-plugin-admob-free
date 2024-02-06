@@ -4,6 +4,29 @@ A free, no ad-sharing version of Google AdMob plugin for Cordova.
 
 ## Status
 
+Currently adding iOS platform may throw this error in RS Projects (WIP)
+
+```
+Analyzing dependencies
+[!] CocoaPods could not find compatible versions for pod "FirebaseAnalytics":
+  In Podfile:
+    Firebase/Core (= 10.10.0) was resolved to 10.10.0, which depends on
+      FirebaseAnalytics (~> 10.10.0)
+
+    GoogleTagManager (= 7.4.3) was resolved to 7.4.3, which depends on
+      FirebaseAnalytics (< 11.0, >= 9.0)
+
+CocoaPods could not find compatible versions for pod "PromisesObjC":
+  In Podfile:
+    Firebase/Installations (= 10.10.0) was resolved to 10.10.0, which depends on
+      FirebaseInstallations (~> 10.10.0) was resolved to 10.10.0, which depends on
+        PromisesObjC (~> 2.1)
+
+    PromisesObjC (~> 1.2)
+
+Specs satisfying the `PromisesObjC (~> 1.2), PromisesObjC (~> 2.1)` dependency were found, but they required a higher minimum deployment target.
+``` 
+
 All `cordova-plugin-admob-free` should switch to use [`admob-plus-cordova`](https://admob-plus.github.io/docs/cordova) for latest improvements.
 
 <del>
